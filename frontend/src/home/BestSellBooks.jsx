@@ -3,11 +3,11 @@ import BookCards from "../components/BookCards"
 // import { data } from "react-router-dom"
 
 
-const FavoriteBooks = () => {
-    const [books, setbooks] = useState([])
+const BestSellerBooks = () => {
+    const [books, setBooks] = useState([])
 
     useEffect(()=>{
-        fetch("http://localhost:5000/all-books").then(res => res.json()).then(data => setbooks(data))
+        fetch("http://localhost:5000/all-books").then(res => res.json()).then(data => setBooks(data.slice(0, 8)))
     })
   return (
     <div>
@@ -16,4 +16,4 @@ const FavoriteBooks = () => {
   )
 }
 
-export default FavoriteBooks
+export default BestSellerBooks

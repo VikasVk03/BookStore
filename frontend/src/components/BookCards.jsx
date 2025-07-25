@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+// import React, { useRef, useState } from 'react';
 // Import Swiper React components
 import { Swiper, SwiperSlide } from 'swiper/react';
 
@@ -22,7 +22,7 @@ const BookCards = ({headline, books}) => {
         </h2>
 
         {/* cards */}
-        <div>
+        <div className='mt-12'>
             <Swiper
                 slidesPerView={1}
                 spaceBetween={10}
