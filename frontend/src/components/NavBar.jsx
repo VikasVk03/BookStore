@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../auth/AuthContext'
 
 // react icons 
 import { FaBarsStaggered, FaBlog, FaXmark } from "react-icons/fa6";
@@ -25,16 +26,18 @@ const NavBar = () => {
         window.addEventListener("scroll", handleScroll)
 
         return () => {
-            window.addEventListener("scroll", handleScroll)
+            window.removeEventListener("scroll", handleScroll)
         }
     }, [])
+
+    const { user, logout } = useAuth() || {}
 
     // navItems here
     const navItems = [
         {label: "Home", path: "/"},
         {label: "About", path: "/about"},
         {label: "Shop", path: "/shop"},
-        {label: "Sell Your Book", path: "/admin/dashboard"},
+        ...(user?.role === 'admin' ? [{label: "Sell Your Book", path: "/admin/dashboard"}] : []),
         {label: "Blog", path: "/blog"},
     ]
   return (
@@ -55,9 +58,19 @@ const NavBar = () => {
                     ))}
                 </ul>
 
-                {/* btn for lg devices */}
-                <div className='space-x-12 hidden lg:flex items-center'>
-                    <button> <FaBarsStaggered className='w-5 hover:text-blue-700'/> </button>
+                {/* auth controls */}
+                <div className='space-x-3 hidden lg:flex items-center'>
+                    {user ? (
+                        <>
+                          <span className='text-sm'>Hi, {user.name}</span>
+                          <button onClick={logout} className='px-3 py-2 rounded bg-blue-700 text-white'>Logout</button>
+                        </>
+                    ) : (
+                        <>
+                          <Link to='/login' className='px-3 py-2 rounded border'>Login</Link>
+                          <Link to='/signup' className='px-3 py-2 rounded bg-blue-700 text-white'>Sign up</Link>
+                        </>
+                    )}
                 </div>
 
                 {/* menu btn for the mobile devices */}
@@ -80,6 +93,16 @@ const NavBar = () => {
                             </Link>
                         </li>
                     ))}
+                    <li className='mt-4'>
+                      {user ? (
+                        <button onClick={logout} className='px-3 py-2 rounded bg-white text-blue-700'>Logout</button>
+                      ) : (
+                        <div className='flex gap-2'>
+                          <Link to='/login' className='px-3 py-2 rounded bg-white text-blue-700'>Login</Link>
+                          <Link to='/signup' className='px-3 py-2 rounded bg-black text-white'>Sign up</Link>
+                        </div>
+                      )}
+                    </li>
                 </ul>
             </div>
         </nav>

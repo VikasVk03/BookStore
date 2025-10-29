@@ -1,115 +1,119 @@
 const express = require("express");
 const app = express();
-const port = process.env.PORT || 5000;
 const cors = require("cors");
+const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
+require("dotenv").config();
+
+const port = process.env.PORT || 5000;
 
 // middleware
-app.use(cors());
+const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
+app.use(
+	cors({
+		origin: allowedOrigin,
+		credentials: true,
+	})
+);
 app.use(express.json());
+app.use(cookieParser());
+app.use(morgan("dev"));
 
 app.get("/", (req, res) => {
-  res.send("Hello World!");
+	res.send("BookStore API is running");
 });
 
-// MongoDb configuration
+// Database connection
+const mongoose = require("mongoose");
+mongoose
+	.connect(process.env.MONGODB_URI, {
+		dbName: process.env.MONGODB_DB || "BookInventory",
+	})
+	.then(() => console.log("Connected to MongoDB"))
+	.catch((err) => {
+		console.error("MongoDB connection error", err);
+		process.exit(1);
+	});
 
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri =
-  "mongodb+srv://vikasvkproject:HPKciRFWb3NcMkOm@cluster0.7ifmwsu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+// Models
+const Book = require("./models/Book");
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
+// Routes
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/books", require("./routes/books"));
+app.use("/api/reviews", require("./routes/reviews"));
+app.use("/api/users", require("./routes/users"));
+app.use("/api/categories", require("./routes/categories"));
+
+// Backward-compatible legacy endpoints used by current frontend
+app.post("/upload-book", async (req, res) => {
+	try {
+		const payload = { ...req.body };
+		if (!payload.categories && typeof payload.category === "string" && payload.category.length) {
+			payload.categories = payload.category
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+		}
+		const book = await Book.create(payload);
+		res.send(book);
+	} catch (e) {
+		res.status(400).send({ message: e.message });
+	}
 });
 
-async function run() {
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+app.get("/all-books", async (req, res) => {
+	try {
+		const { category, categories, q } = req.query;
+		const filters = {};
+		let categoryList = [];
+		if (Array.isArray(categories)) categoryList = categories;
+		else if (typeof categories === "string" && categories.length) categoryList = categories.split(",");
+		else if (typeof category === "string" && category.length) categoryList = category.split(",");
+		if (categoryList.length) {
+			filters.$or = [{ categories: { $in: categoryList } }, { category: { $in: categoryList } }];
+		}
+		if (q) filters.$text = { $search: q };
+		const books = await Book.find(filters).sort({ createdAt: -1 });
+		res.send(books);
+	} catch (e) {
+		res.status(500).send({ message: e.message });
+	}
+});
 
-    // create a collection of documents
-    const bookCollections = client.db("BookInventory").collection("books");
+app.get("/book/:id", async (req, res) => {
+	try {
+		const book = await Book.findById(req.params.id);
+		if (!book) return res.status(404).send({ message: "Book not found" });
+		res.send(book);
+	} catch (e) {
+		res.status(400).send({ message: e.message });
+	}
+});
 
-    // insert a book to the db: post method
-    app.post("/upload-book", async (req, res) => {
-      const data = req.body;
-      const result = await bookCollections.insertOne(data);
-      res.send(result);
-    });
+app.patch("/book/:id", async (req, res) => {
+	try {
+		const book = await Book.findByIdAndUpdate(req.params.id, req.body, {
+			new: true,
+			runValidators: true,
+		});
+		if (!book) return res.status(404).send({ message: "Book not found" });
+		res.send(book);
+	} catch (e) {
+		res.status(400).send({ message: e.message });
+	}
+});
 
-    // get all books
-    app.get("/all-books", async (req, res) => {
-      const books = bookCollections.find();
-      const result = await books.toArray();
-      res.send(result);
-    });
-
-    // update a book data: patch or update methods
-    app.patch("/book/:id", async (req, res) => {
-      const id = req.params.id;
-      //   console.log(id);
-      const updateBookData = req.body;
-      const filter = { _id: new ObjectId(id) };
-      const options = { upsert: true };
-
-      const updateDoc = {
-        $set: {
-          ...updateBookData,
-        },
-      };
-
-      // update
-      const result = await bookCollections.updateOne(
-        filter,
-        updateDoc,
-        options
-      );
-
-      res.send(result);
-    });
-
-    // delete a book data
-    app.delete("/book/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const result = await bookCollections.deleteOne(filter);
-      res.send(result);
-    });
-
-    // find by category
-    app.get("/all-books", async (req, res) => {
-      let query = {};
-      if (req.query?.category) {
-        query = { category: req.query.category };
-      }
-      const result = await bookCollections.find(query).toArray();
-      res.send(result);
-    });
-
-    // to get single book data
-    app.get("/book/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const result = await bookCollections.findOne(filter);
-      res.send(result);
-    });
-
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
-  } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
-  }
-}
-run().catch(console.dir);
+app.delete("/book/:id", async (req, res) => {
+	try {
+		const deleted = await Book.findByIdAndDelete(req.params.id);
+		if (!deleted) return res.status(404).send({ message: "Book not found" });
+		res.send({ success: true });
+	} catch (e) {
+		res.status(400).send({ message: e.message });
+	}
+});
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
+	console.log(`Server listening on port ${port}`);
 });
